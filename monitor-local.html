@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Monitor Pessoal</title>
+<style>
+:root{--bg:#0b1220;--panel:#121b2e;--line:#223250;--text:#e8edf6;--mute:#8d9bb5;--gold:#d4a84b;--ok:#3fcf8e;--rec:#ff5468;--warn:#f0b429;color-scheme:dark}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 "Segoe UI",system-ui,sans-serif;display:flex;justify-content:center;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+main{width:100%;max-width:440px;padding:14px 14px 40px}
+header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+h1{font-size:20px;margin:0;font-weight:650}h1 span{color:var(--gold)}
+.tag{font-size:12px;color:var(--ok);border:1px solid var(--ok);border-radius:99px;padding:2px 10px;white-space:nowrap}
+.video{position:relative;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#000;aspect-ratio:4/3}
+video{width:100%;height:100%;object-fit:cover;display:none}
+.idle{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--mute);text-align:center;padding:16px}
+.chips{position:absolute;left:8px;top:8px;right:8px;display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:12px;padding:3px 9px;border-radius:99px;background:rgba(11,18,32,.85);border:1px solid var(--line);display:inline-flex;align-items:center;gap:6px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--mute)}
+.on .dot{background:var(--ok)}.rec.on .dot{background:var(--rec);animation:pulse 1s infinite}.warn .dot{background:var(--warn)}
+@keyframes pulse{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.rec.on .dot{animation:none}}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}
+button{font:inherit;color:var(--text);cursor:pointer;border-radius:12px;border:1px solid var(--line);background:var(--panel);padding:13px 10px;min-height:48px}
+button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+button:disabled{opacity:.4;cursor:not-allowed}
+.start{background:var(--gold);color:#1a1405;border-color:var(--gold);font-weight:650}
+.stop{border-color:var(--rec);color:var(--rec)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:10px}
+.card h2{font-size:14px;margin:0 0 8px;color:var(--mute);font-weight:600}
+.line{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.sw{position:relative;width:52px;height:30px;border-radius:99px;background:#2a3a5c;border:0;padding:0;min-height:0;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:left .15s}
+.sw[aria-checked=true]{background:var(--gold)}.sw[aria-checked=true]::after{left:25px}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:6px}.seg button{padding:10px}
+.seg button[aria-pressed=true]{border-color:var(--gold);color:var(--gold)}
+.meter{display:flex;gap:3px;height:18px;align-items:flex-end;margin-top:8px}
+.meter i{flex:1;background:#2a3a5c;border-radius:2px;height:20%}.meter i.lit{background:var(--ok)}
+.bar{height:8px;border-radius:99px;background:#2a3a5c;overflow:hidden;margin:6px 0}.bar b{display:block;height:100%;width:0;background:var(--gold)}
+small{color:var(--mute);font-size:13px}
+#log{max-height:160px;overflow:auto;font-size:13px;display:flex;flex-direction:column;gap:4px}
+#log div{border-left:3px solid var(--line);padding-left:8px}#log .err{border-color:var(--rec)}#log .ok{border-color:var(--ok)}#log .wn{border-color:var(--warn)}
+.item{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--line);font-size:13px}
+.item button{min-height:36px;padding:6px 10px;font-size:13px}
+#player{width:100%;margin-top:8px;border-radius:10px;display:none;background:#000}
+</style>
+</head>
+<body>
+<main>
+<header><h1>Monitor <span>Pessoal</span></h1><span class="tag">Teste local · real</span></header>
+
+<div class="video">
+  <video id="vid" autoplay muted playsinline></video>
+  <div class="idle" id="idle"><b>Câmera desligada</b><small>Toque em “Iniciar monitoramento”</small></div>
+  <div class="chips">
+    <div class="chip" id="chCam"><i class="dot"></i><span>Câmera desligada</span></div>
+    <div class="chip" id="chMic"><i class="dot"></i><span>Microfone off</span></div>
+    <div class="chip rec" id="chRec"><i class="dot"></i><span>Sem gravação</span></div>
+  </div>
+</div>
+<div class="chip" id="chNet" style="margin-top:10px"><i class="dot"></i><span>Sem conexão remota (ainda não implementada). Nada sai deste aparelho.</span></div>
+
+<div class="card" id="alert" style="display:none;margin-top:10px" role="alert"></div>
+<div class="row">
+  <button class="start" id="btnStart">Iniciar monitoramento</button>
+  <button class="stop" id="btnStop" disabled>Encerrar monitoramento</button>
+</div>
+
+<div class="card"><h2>Câmera</h2>
+  <div class="seg" role="group" aria-label="Câmera">
+    <button id="camFront" aria-pressed="true">Frontal</button><button id="camBack" aria-pressed="false">Traseira</button>
+  </div></div>
+
+<div class="card">
+  <div class="line"><div><b>Áudio do microfone</b><br><small id="audSub">Desativado</small></div>
+    <button class="sw" id="swAud" role="switch" aria-checked="false" aria-label="Áudio"></button></div>
+  <div class="meter" id="meter" aria-hidden="true"></div>
+</div>
+
+<div class="card">
+  <div class="line"><div><b>Gravação neste aparelho</b><br><small id="recSub">Desligada</small></div>
+    <button class="sw" id="swRec" role="switch" aria-checked="false" aria-label="Gravação"></button></div>
+</div>
+
+<div class="card"><h2>Armazenamento do navegador</h2>
+  <div class="bar"><b id="stBar"></b></div><small id="stTxt">Verificando…</small></div>
+
+<div class="card"><h2>Gravações salvas</h2><div id="list"><small>Nenhuma gravação.</small></div>
+  <video id="player" controls playsinline></video></div>
+
+<div class="card"><h2>Mensagens</h2><div id="log" aria-live="polite"></div></div>
+</main>
+
+<script>
+const $=id=>document.getElementById(id);
+const S={run:false,cam:'front',aud:false,rec:false,recSec:0,busy:false};
+let vStream=null,aStream=null,actx=null,analyser=null,wake=null,mr=null,chunks=[],recTimer=null,meterTimer=null,db=null;
+const fmt=s=>String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
+const mb=b=>(b/1048576).toFixed(1)+' MB';
+
+function log(m,k=''){if(k==='err'){const a=$('alert');a.style.display='block';a.style.borderColor='var(--rec)';a.textContent=m}const d=document.createElement('div');if(k)d.className=k;d.textContent=new Date().toLocaleTimeString('pt-BR')+'  '+m;$('log').prepend(d);while($('log').children.length>30)$('log').lastChild.remove()}
+function chip(el,on,txt,warn){el.classList.toggle('on',!!on&&!warn);el.classList.toggle('warn',!!warn);el.querySelector('span').textContent=txt}
+function render(){
+  const cn=S.cam==='front'?'frontal':'traseira';
+  chip($('chCam'),S.run,S.run?'Câmera '+cn+' ativa':'Câmera desligada');
+  chip($('chMic'),S.run&&!!aStream,S.run&&aStream?'Microfone ativo':'Microfone off');
+  chip($('chRec'),S.rec,S.rec?'REC '+fmt(S.recSec):'Sem gravação');
+  $('btnStart').disabled=S.run||S.busy;$('btnStop').disabled=!S.run;
+  $('camFront').setAttribute('aria-pressed',S.cam==='front');$('camBack').setAttribute('aria-pressed',S.cam==='back');
+  $('swAud').setAttribute('aria-checked',!!aStream||(!S.run&&S.aud));$('swRec').setAttribute('aria-checked',S.rec||(!S.run&&S.recWant));
+  $('audSub').textContent=aStream?'Ativo':(S.aud&&!S.run?'Ligado · pede permissão ao iniciar':'Desativado');
+  $('recSub').textContent=S.rec?'Gravando neste aparelho':(S.recWant&&!S.run?'Ligada · começa ao iniciar':'Desligada');
+  $('vid').style.display=S.run?'block':'none';$('idle').style.display=S.run?'none':'flex';
+}
+
+/* mensagens de erro de permissão e hardware */
+function explain(e,what){
+  const n=e&&e.name;
+  if(n==='NotAllowedError'||n==='SecurityError')return what+' bloqueado. Libere a permissão no cadeado do navegador (ou nas configurações do Android) e tente de novo. Se já liberou e continua bloqueado, esta página hospedada pode estar sem permissão para usar a câmera.';
+  if(n==='NotFoundError')return 'Nenhum dispositivo de '+what.toLowerCase()+' encontrado.';
+  if(n==='NotReadableError')return what+' em uso por outro app. Feche o outro app e tente de novo.';
+  return 'Falha em '+what.toLowerCase()+': '+(n||e);
+}
+async function getVideo(){
+  try{return await navigator.mediaDevices.getUserMedia({video:{facingMode:{exact:S.cam==='front'?'user':'environment'},width:{ideal:1280},height:{ideal:720}},audio:false})}
+  catch(e){if(e.name==='OverconstrainedError'){log('Câmera '+(S.cam==='front'?'frontal':'traseira')+' não encontrada; usando a câmera disponível.','wn');return await navigator.mediaDevices.getUserMedia({video:true,audio:false})}throw e}
+}
+async function startAudio(){
+  aStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true},video:false});
+  actx=new (window.AudioContext||window.webkitAudioContext)();analyser=actx.createAnalyser();analyser.fftSize=256;
+  actx.createMediaStreamSource(aStream).connect(analyser);
+}
+function stopAudio(){if(aStream)aStream.getTracks().forEach(t=>t.stop());aStream=null;if(actx){actx.close();actx=null}analyser=null}
+function watch(stream){stream.getTracks().forEach(t=>t.addEventListener('ended',()=>{if(S.run&&vStream===stream){log('A câmera foi interrompida pelo sistema.','err');stopAll('Monitoramento encerrado por interrupção da câmera.')}}))}
+
+async function start(){
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){log('Este navegador/página não permite acesso à câmera. É preciso abrir por HTTPS.','err');return}
+  S.busy=true;render();{const a=$('alert');a.style.display='block';a.style.borderColor='var(--gold)';a.textContent='Pedindo acesso à câmera…'}
+  try{
+    const w8=setTimeout(()=>log('O navegador não respondeu ao pedido de câmera. Esta página hospedada pode estar sem permissão para usar a câmera.','err'),8000);try{vStream=await getVideo()}finally{clearTimeout(w8)}$('vid').srcObject=vStream;watch(vStream);S.run=true;$('alert').style.display='none';
+    log('Monitoramento iniciado. Vídeo apenas neste aparelho.','ok');
+    if(S.aud){try{await startAudio();log('Microfone ativo.','ok')}catch(e){S.aud=false;log(explain(e,'Microfone'),'err')}}
+    try{if('wakeLock' in navigator){wake=await navigator.wakeLock.request('screen')}else log('Este navegador não mantém a tela acesa. Ela pode apagar e parar a câmera.','wn')}catch(e){log('Não foi possível manter a tela acesa.','wn')}
+    if(S.recWant)startRec();
+  }catch(e){log(explain(e,'Câmera'),'err');vStream=null}
+  S.busy=false;render();
+}
+function stopAll(msg){
+  if(S.rec)stopRec();
+  if(vStream)vStream.getTracks().forEach(t=>t.stop());vStream=null;$('vid').srcObject=null;
+  stopAudio();if(wake){wake.release().catch(()=>{});wake=null}
+  S.run=false;log(msg||'Monitoramento encerrado.');render();
+}
+$('btnStart').onclick=start;$('btnStop').onclick=()=>stopAll();
+
+/* câmera frontal/traseira */
+async function setCam(c){
+  if(S.cam===c)return;
+  if(S.rec){log('Pare a gravação antes de trocar de câmera.','wn');return}
+  S.cam=c;render();
+  if(S.run){
+    try{const old=vStream;const n=await getVideo();vStream=n;$('vid').srcObject=n;watch(n);old.getTracks().forEach(t=>t.stop());log('Câmera '+(c==='front'?'frontal':'traseira')+' ativa.','ok')}
+    catch(e){log(explain(e,'Câmera'),'err');S.cam=c==='front'?'back':'front'}
+    render();
+  }
+}
+$('camFront').onclick=()=>setCam('front');$('camBack').onclick=()=>setCam('back');
+
+/* áudio */
+$('swAud').onclick=async()=>{
+  if(S.rec){log('Pare a gravação antes de mudar o áudio.','wn');return}
+  if(!S.run){S.aud=!S.aud;render();return}
+  if(aStream){stopAudio();S.aud=false;log('Microfone desligado.')}
+  else{try{await startAudio();S.aud=true;log('Microfone ativo.','ok')}catch(e){log(explain(e,'Microfone'),'err')}}
+  render();
+};
+meterTimer=setInterval(()=>{
+  const bars=$('meter').children;let lvl=0;
+  if(analyser){const a=new Uint8Array(analyser.frequencyBinCount);analyser.getByteFrequencyData(a);lvl=Math.min(1,a.reduce((x,y)=>x+y,0)/a.length/90)}
+  [...bars].forEach((b,i)=>{const lit=i/24<lvl;b.classList.toggle('lit',lit);b.style.height=(lit?40+60*Math.random():20)+'%'});
+},120);
+for(let i=0;i<24;i++)$('meter').appendChild(document.createElement('i'));
+
+/* gravação */
+function startRec(){
+  if(!window.MediaRecorder){log('Este navegador não grava vídeo.','err');S.recWant=false;return}
+  const tracks=[...vStream.getVideoTracks(),...(aStream?aStream.getAudioTracks():[])];
+  const ms=new MediaStream(tracks);
+  const mime=['video/webm;codecs=vp8,opus','video/webm;codecs=vp9,opus','video/webm','video/mp4'].find(m=>MediaRecorder.isTypeSupported(m))||'';
+  try{mr=new MediaRecorder(ms,mime?{mimeType:mime}:undefined)}catch(e){log('Não foi possível iniciar a gravação: '+e.name,'err');S.recWant=false;return}
+  chunks=[];S.recSec=0;
+  mr.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};
+  mr.onstop=async()=>{
+    const blob=new Blob(chunks,{type:mr.mimeType||'video/webm'});
+    if(!blob.size){log('Gravação vazia, nada foi salvo.','wn');return}
+    try{await saveRec({when:Date.now(),dur:S.lastDur,audio:!!aStream||S.lastAudio,blob});log('Gravação salva neste aparelho ('+mb(blob.size)+').','ok')}
+    catch(e){log('Não foi possível salvar a gravação: '+(e.name||e)+'. Espaço insuficiente?','err')}
+    loadList();updateStorage();
+  };
+  S.lastAudio=!!aStream;mr.start(1000);S.rec=true;
+  recTimer=setInterval(()=>{S.recSec++;S.lastDur=S.recSec;render()},1000);
+  log('Gravação iniciada'+(aStream?' com áudio.':' sem áudio.'),'ok');
+}
+function stopRec(){clearInterval(recTimer);S.lastDur=S.recSec;S.rec=false;if(mr&&mr.state!=='inactive')mr.stop();S.recSec=0}
+$('swRec').onclick=()=>{
+  if(!S.run){S.recWant=!S.recWant;log(S.recWant?'Gravação ligada. Começa quando você iniciar o monitoramento.':'Gravação desligada.',S.recWant?'wn':'');render();return}
+  if(S.rec){S.recWant=false;stopRec()}else{S.recWant=true;startRec()}
+  render();
+};
+
+/* armazenamento (IndexedDB) */
+function openDb(){return new Promise((res,rej)=>{try{const r=indexedDB.open('monitor-pessoal',1);r.onupgradeneeded=()=>r.result.createObjectStore('rec',{keyPath:'id',autoIncrement:true});r.onsuccess=()=>{db=r.result;res()};r.onerror=()=>rej(r.error)}catch(e){rej(e)}})}
+const tx=(m)=>db.transaction('rec',m).objectStore('rec');
+const saveRec=o=>new Promise((res,rej)=>{const r=tx('readwrite').add(o);r.onsuccess=res;r.onerror=()=>rej(r.error)});
+const allRec=()=>new Promise((res,rej)=>{const r=tx('readonly').getAll();r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
+const delRec=id=>new Promise((res,rej)=>{const r=tx('readwrite').delete(id);r.onsuccess=res;r.onerror=()=>rej(r.error)});
+async function loadList(){
+  const el=$('list');
+  if(!db){el.innerHTML='<small>Armazenamento local indisponível neste navegador.</small>';return}
+  const items=(await allRec()).sort((a,b)=>b.when-a.when);
+  el.innerHTML=items.length?'':'<small>Nenhuma gravação.</small>';
+  items.forEach(it=>{
+    const d=document.createElement('div');d.className='item';
+    const t=document.createElement('span');t.textContent=new Date(it.when).toLocaleString('pt-BR')+' · '+fmt(it.dur||0)+' · '+mb(it.blob.size)+(it.audio?' · com áudio':' · sem áudio');
+    const b=document.createElement('span');
+    const p=document.createElement('button');p.textContent='Ver';p.onclick=()=>{const v=$('player');if(v.src)URL.revokeObjectURL(v.src);v.src=URL.createObjectURL(it.blob);v.style.display='block';v.play().catch(()=>{})};
+    const x=document.createElement('button');x.textContent='Apagar';x.style.marginLeft='6px';x.onclick=async()=>{await delRec(it.id);log('Gravação apagada.');loadList();updateStorage()};
+    b.append(p,x);d.append(t,b);el.appendChild(d);
+  });
+}
+async function updateStorage(){
+  try{const e=await navigator.storage.estimate();$('stBar').style.width=Math.min(100,e.usage/e.quota*100)+'%';
+    $('stTxt').textContent='Usado pelo app: '+mb(e.usage)+'. Cota disponível ao navegador: '+(e.quota/1073741824).toFixed(1)+' GB (não é o espaço livre total do celular).'}
+  catch(e){$('stTxt').textContent='Indisponível neste navegador.'}
+}
+
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&S.run)log('O app saiu da tela. O navegador pode pausar a câmera em segundo plano.','wn');else if(!document.hidden&&S.run&&!wake&&'wakeLock' in navigator)navigator.wakeLock.request('screen').then(w=>wake=w).catch(()=>{})});
+(async()=>{log('Pronto. A câmera só liga quando você tocar em Iniciar.');try{await openDb()}catch(e){log('Armazenamento local indisponível: '+(e.name||e),'err')}loadList();updateStorage();render()})();
+</script>
+</body>
+</html>
